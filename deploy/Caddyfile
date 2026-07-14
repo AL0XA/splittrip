@@ -1,0 +1,15 @@
+# Caddy автоматически получает и продлевает бесплатный HTTPS-сертификат
+# (Let's Encrypt) для splittrip.fun и проксирует запросы на uvicorn.
+# Файл кладётся в /etc/caddy/Caddyfile
+
+splittrip.fun {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}
+
+# Необязательно: если создашь A-запись для www — редиректим на основной домен.
+# Если www-записи нет, просто удали этот блок, чтобы Caddy не пытался брать
+# для него сертификат.
+www.splittrip.fun {
+    redir https://splittrip.fun{uri} permanent
+}

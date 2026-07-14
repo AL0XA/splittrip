@@ -1,0 +1,17 @@
+# systemd-юнит для Telegram-бота (aiogram polling).
+# Файл кладётся в /etc/systemd/system/cookie-bot.service
+
+[Unit]
+Description=Cookie Clicker Telegram Bot
+After=network.target
+
+[Service]
+User=cookie
+Group=cookie
+WorkingDirectory=/opt/tg_miniapp/backend
+ExecStart=/opt/tg_miniapp/backend/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
