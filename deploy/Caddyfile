@@ -4,6 +4,8 @@
 
 splittrip.fun {
     encode zstd gzip
+    # Заставляем клиента сверять версию файлов (иначе Telegram кэширует старый фронт).
+    header Cache-Control "no-cache"
     reverse_proxy 127.0.0.1:8000
 }
 

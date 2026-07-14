@@ -47,9 +47,10 @@ function haptic(type = "light") {
 // ---------- Экран: список событий ----------
 async function renderHome() {
   current = null;
-  view.innerHTML = `<div class="topbar"><h1>💸 Мои тусовки</h1></div>
+  tg?.BackButton?.hide();
+  view.innerHTML = `<h1 class="page-title">💸 Мои тусовки</h1>
     <div id="events" class="muted">Загрузка…</div>
-    <button class="primary" id="create-btn" style="margin-top:14px">＋ Создать тусовку</button>`;
+    <button class="primary fab-gap" id="create-btn">＋ Создать тусовку</button>`;
   document.getElementById("create-btn").onclick = showCreateSheet;
 
   try {
@@ -64,7 +65,8 @@ async function renderHome() {
     box.className = "";
     box.innerHTML = events.map((e) => `
       <div class="card event-item" data-id="${e.id}">
-        <div style="flex:1">
+        <div class="avatar">${esc((e.title.trim()[0] || "•").toUpperCase())}</div>
+        <div>
           <div class="title">${esc(e.title)}</div>
           <div class="sub">${e.member_count} участник(ов)</div>
         </div>
@@ -95,19 +97,18 @@ function renderEvent() {
   const cur = d.currency;
 
   const membersHtml = d.members.map((m) =>
-    `<span class="chip">${esc(m.name)}${m.user_id === d.me_id ? " (вы)" : ""}</span>`).join("");
+    `<span class="chip${m.user_id === d.me_id ? " me" : ""}">${esc(m.name)}${m.user_id === d.me_id ? " (вы)" : ""}</span>`).join("");
 
   const expensesHtml = d.expenses.length
     ? d.expenses.map((e) => `
         <div class="expense">
-          <div class="icon">🧾</div>
           <div class="info">
             <div class="desc">${esc(e.description)}</div>
-            <div class="meta">${esc(e.payer_name)} заплатил · на ${e.participant_count} чел.</div>
+            <div class="meta">${esc(e.payer_name)} · делят ${e.participant_count}</div>
           </div>
           <div class="amount">${money(e.amount, cur)}</div>
           ${(e.payer_id === d.me_id || d.owner_id === d.me_id)
-            ? `<button class="del" data-eid="${e.id}">🗑</button>` : ""}
+            ? `<button class="del" data-eid="${e.id}">✕</button>` : ""}
         </div>`).join("")
     : `<div class="empty">Пока нет трат. Добавьте первую!</div>`;
 
@@ -128,16 +129,13 @@ function renderEvent() {
     return `<div class="balance-line"><span>${esc(m.name)}</span><span class="${cls}">${txt}</span></div>`;
   }).join("");
 
+  tg?.BackButton?.show();
   view.innerHTML = `
-    <div class="topbar">
-      <button class="back" id="back">‹ Назад</button>
-      <div class="spacer"></div>
-    </div>
-    <h1>${esc(d.title)}</h1>
+    <h1 class="page-title">${esc(d.title)}</h1>
     <div class="card">
-      <div class="row"><h2 style="margin:0">Участники (${d.members.length})</h2></div>
-      <div class="members" style="margin-top:8px">${membersHtml}</div>
-      <button class="secondary" id="invite" style="margin-top:12px">🔗 Пригласить друзей</button>
+      <h2>Участники · ${d.members.length}</h2>
+      <div class="members">${membersHtml}</div>
+      <button class="secondary" id="invite" style="margin-top:14px">🔗 Пригласить друзей</button>
     </div>
 
     <div class="tabs">
@@ -146,15 +144,14 @@ function renderEvent() {
     </div>
 
     <div id="tab-body"></div>
-    <button class="primary" id="add-expense" style="margin-top:14px">＋ Добавить трату</button>`;
+    <button class="primary fab-gap" id="add-expense">＋ Добавить трату</button>`;
 
   const body = document.getElementById("tab-body");
   body.innerHTML = activeTab === "expenses"
     ? `<div class="card">${expensesHtml}</div>`
-    : `<div class="card"><h2 style="margin-top:0">Кто кому переводит</h2>${settlementHtml}</div>
-       <div class="card"><h2 style="margin-top:0">Балансы</h2>${balancesHtml}</div>`;
+    : `<div class="card"><h2>Кто кому переводит</h2>${settlementHtml}</div>
+       <div class="card"><h2>Балансы</h2>${balancesHtml}</div>`;
 
-  document.getElementById("back").onclick = renderHome;
   document.getElementById("invite").onclick = invite;
   document.getElementById("add-expense").onclick = showExpenseSheet;
   view.querySelectorAll(".tab").forEach((t) => (t.onclick = () => {
@@ -229,7 +226,11 @@ function showExpenseSheet() {
 }
 
 async function deleteExpense(eid) {
-  if (!confirm("Удалить трату?")) return;
+  const ok = await new Promise((res) => {
+    if (tg?.showConfirm) tg.showConfirm("Удалить эту трату?", res);
+    else res(confirm("Удалить трату?"));
+  });
+  if (!ok) return;
   try {
     current = await api(`/api/events/${current.id}/expenses/${eid}`, { method: "DELETE" });
     renderEvent();
@@ -253,21 +254,44 @@ function invite() {
 function openSheet(html, onMount) {
   const ov = document.createElement("div");
   ov.className = "overlay";
-  ov.innerHTML = `<div class="sheet">${html}</div>`;
+  ov.innerHTML = `<div class="sheet"><div class="grabber"></div>${html}</div>`;
   ov.onclick = (e) => { if (e.target === ov) closeSheet(); };
   document.body.appendChild(ov);
   openSheet._ov = ov;
+  tg?.BackButton?.show();
   onMount?.();
 }
 function closeSheet() {
   openSheet._ov?.remove();
   openSheet._ov = null;
+  if (current) tg?.BackButton?.show(); else tg?.BackButton?.hide();
+}
+
+// ---------- Safe-area (чтобы контент не залезал под шапку Telegram) ----------
+function applyInsets() {
+  const sa = tg?.safeAreaInset || {};
+  const csa = tg?.contentSafeAreaInset || {};
+  const root = document.documentElement.style;
+  root.setProperty("--inset-top", ((sa.top || 0) + (csa.top || 0)) + "px");
+  root.setProperty("--inset-bottom", ((sa.bottom || 0) + (csa.bottom || 0)) + "px");
 }
 
 // ---------- Инициализация ----------
 async function init() {
   tg?.ready();
   tg?.expand();
+  try { tg?.setHeaderColor?.("bg_color"); } catch {}
+  try { tg?.setBackgroundColor?.("bg_color"); } catch {}
+
+  applyInsets();
+  ["safeAreaChanged", "contentSafeAreaChanged", "viewportChanged", "themeChanged"]
+    .forEach((ev) => tg?.onEvent?.(ev, applyInsets));
+
+  // Нативная кнопка «Назад»: закрывает модалку или возвращает к списку тусовок.
+  tg?.BackButton?.onClick(() => {
+    if (openSheet._ov) { closeSheet(); return; }
+    if (current) { renderHome(); return; }
+  });
 
   const startParam = tg?.initDataUnsafe?.start_param;
   if (startParam) {
